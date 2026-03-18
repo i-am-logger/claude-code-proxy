@@ -754,7 +754,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "claude_proxy=info".into()),
+                .unwrap_or_else(|_| "claude_code_proxy=info".into()),
         )
         .init();
 
@@ -783,7 +783,7 @@ async fn main() {
         .await
         .expect("Failed to bind");
 
-    info!(port, model = default_model, "claude-proxy starting");
+    info!(port, model = default_model, "claude-code-proxy starting");
     axum::serve(listener, app).await.unwrap();
 }
 

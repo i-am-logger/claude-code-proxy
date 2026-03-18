@@ -1,12 +1,12 @@
 [package]
-name = "claude-proxy"
+name = "claude-code-proxy"
 version = "0.2.0"
 edition = "2024"
 authors = ["i-am-logger"]
 description = "OpenAI-compatible API proxy for Claude Code CLI"
 license = "CC-BY-NC-SA-4.0"
-repository = "https://github.com/i-am-logger/claude-proxy"
-keywords = ["claude", "openai", "proxy", "llm", "api"]
+repository = "https://github.com/i-am-logger/claude-code-proxy"
+keywords = ["claude-code", "openai", "proxy", "llm", "api"]
 categories = ["command-line-utilities", "web-programming::http-server"]
 
 [dependencies]

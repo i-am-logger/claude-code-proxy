@@ -1,6 +1,6 @@
-# claude-proxy
+# claude-code-proxy
 
-[![CI](https://github.com/i-am-logger/claude-proxy/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/i-am-logger/claude-proxy/actions/workflows/ci.yml)
+[![CI](https://github.com/i-am-logger/claude-code-proxy/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/i-am-logger/claude-code-proxy/actions/workflows/ci.yml)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Rust](https://img.shields.io/badge/Rust-2024-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 
@@ -22,7 +22,7 @@ Claude Code CLI is powerful but only works in the terminal. This proxy exposes i
 Client (OpenClaw/Cursor/etc.)
     │
     ▼  POST /v1/chat/completions or /v1/responses
-claude-proxy (this binary)
+claude-code-proxy (this binary)
     │
     ▼  claude --print --model opus --output-format stream-json
 Claude Code CLI (uses Max subscription)
@@ -45,7 +45,7 @@ All endpoints also available without the `/v1` prefix.
 ## Usage
 
 ```bash
-PROXY_API_KEY=your-secret claude-proxy
+PROXY_API_KEY=your-secret claude-code-proxy
 ```
 
 Then point your client to `http://localhost:8080/v1`.
@@ -87,7 +87,7 @@ curl -H "Authorization: Bearer your-secret" \
 {
   "models": {
     "providers": {
-      "claude-proxy": {
+      "claude-code-proxy": {
         "api": "openai-completions",
         "baseUrl": "http://127.0.0.1:8080/v1",
         "apiKey": "your-secret",
