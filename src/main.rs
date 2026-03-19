@@ -30,6 +30,10 @@ struct Cli {
     #[arg(short, long, env = "PORT", default_value = "8080")]
     port: u16,
 
+    /// Listen address
+    #[arg(long, env = "HOST", default_value = "127.0.0.1")]
+    host: String,
+
     /// Default Claude model (haiku/sonnet/opus)
     #[arg(short, long, env = "CLAUDE_MODEL", default_value = "sonnet")]
     model: String,
@@ -779,11 +783,12 @@ async fn main() {
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024)) // 1MB max request body
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
+    let host = cli.host;
+    let listener = tokio::net::TcpListener::bind(format!("{host}:{port}"))
         .await
         .expect("Failed to bind");
 
-    info!(port, model = default_model, "claude-code-proxy starting");
+    info!(%host, port, model = default_model, "claude-code-proxy starting");
     axum::serve(listener, app).await.unwrap();
 }
 
