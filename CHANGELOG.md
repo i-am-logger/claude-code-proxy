@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/i-am-logger/claude-code-proxy/compare/claude-code-proxy-v0.3.0...claude-code-proxy-v0.4.0) (2026-03-19)
+
+
+### Features
+
+* add --host flag to bind to specific address (default 127.0.0.1) ([f30a6e0](https://github.com/i-am-logger/claude-code-proxy/commit/f30a6e0de124fbbfb37bb4e2705e6239685db0a9))
+
 ## [0.3.0](https://github.com/i-am-logger/claude-code-proxy/compare/claude-code-proxy-v0.2.0...claude-code-proxy-v0.3.0) (2026-03-19)
 
 
