@@ -15,7 +15,7 @@ use std::{convert::Infallible, process::Stdio, sync::Arc};
 use subtle::ConstantTimeEq;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tokio_stream::wrappers::LinesStream;
+use tokio_stream::StreamExt;
 use tracing::info;
 
 /// OpenAI-compatible API proxy for Claude Code CLI
@@ -533,7 +533,6 @@ async fn chat_completions(
                 )
             })?;
 
-        // Take stdout BEFORE creating the stream — child stays alive via _child binding
         let stdout = child.stdout.take().ok_or_else(|| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -545,35 +544,39 @@ async fn chat_completions(
                 }),
             )
         })?;
-        let _child = child; // keep child alive for the stream's lifetime
 
-        let reader = BufReader::new(stdout);
-        let lines = LinesStream::new(reader.lines());
         let chat_id = format!("chatcmpl-{}", uuid::Uuid::new_v4());
         let created = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        let stream = async_stream::stream! {
-            use tokio_stream::StreamExt;
-            // _child is captured by reference, keeping the process alive
-            let _ = &_child;
-            let mut lines = lines;
+        // Spawn a task that owns the child process and sends SSE events via channel
+        let (tx, rx) = tokio::sync::mpsc::channel::<Event>(32);
+        tokio::spawn(async move {
+            let _child = child; // child lives as long as this task
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
             let mut sent_role = false;
 
-            while let Some(Ok(line)) = lines.next().await {
-                let line: String = line;
+            while let Ok(Some(line)) = lines.next_line().await {
                 if let Some((text, is_assistant)) = extract_stream_text(&line) {
-                    // Skip result fallback if assistant content was already sent
-                    if !is_assistant && sent_role { continue; }
+                    if !is_assistant && sent_role {
+                        continue;
+                    }
                     if !sent_role {
                         let chunk = serde_json::json!({
                             "id": &chat_id, "object": "chat.completion.chunk",
                             "created": created, "model": &model,
                             "choices": [{"index": 0, "delta": {"role": "assistant"}}]
                         });
-                        yield Ok::<_, Infallible>(Event::default().data(chunk.to_string()));
+                        if tx
+                            .send(Event::default().data(chunk.to_string()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
                         sent_role = true;
                     }
                     let chunk = serde_json::json!({
@@ -581,19 +584,29 @@ async fn chat_completions(
                         "created": created, "model": &model,
                         "choices": [{"index": 0, "delta": {"content": text}}]
                     });
-                    yield Ok(Event::default().data(chunk.to_string()));
+                    if tx
+                        .send(Event::default().data(chunk.to_string()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
             }
 
-            // Final chunk
+            // Final chunks
             let final_chunk = serde_json::json!({
                 "id": &chat_id, "object": "chat.completion.chunk",
                 "created": created, "model": &model,
                 "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
             });
-            yield Ok(Event::default().data(final_chunk.to_string()));
-            yield Ok(Event::default().data("[DONE]"));
-        };
+            let _ = tx
+                .send(Event::default().data(final_chunk.to_string()))
+                .await;
+            let _ = tx.send(Event::default().data("[DONE]")).await;
+        });
+
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok::<_, Infallible>);
 
         Ok(Sse::new(stream).into_response())
     } else {
@@ -674,60 +687,57 @@ async fn responses(
             .stdout
             .take()
             .ok_or_else(|| make_error("Failed to capture claude stdout".into()))?;
-        let _child = child;
 
-        let reader = BufReader::new(stdout);
-        let lines = LinesStream::new(reader.lines());
         let resp_id = format!("resp_{}", uuid::Uuid::new_v4());
         let item_id = format!("msg_{}", uuid::Uuid::new_v4());
 
-        let stream = async_stream::stream! {
-            use tokio_stream::StreamExt;
-            let _ = &_child;
-            let mut lines = lines;
+        let (tx, rx) = tokio::sync::mpsc::channel::<Event>(32);
+        tokio::spawn(async move {
+            let _child = child;
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
 
-            // response.created
-            yield Ok::<_, Infallible>(Event::default()
+            let _ = tx.send(Event::default()
                 .event("response.created")
-                .data(serde_json::json!({"type":"response.created","response":{"id":&resp_id,"object":"response","status":"in_progress"}}).to_string()));
+                .data(serde_json::json!({"type":"response.created","response":{"id":&resp_id,"object":"response","status":"in_progress"}}).to_string())).await;
 
-            // response.output_item.added
-            yield Ok(Event::default()
+            let _ = tx.send(Event::default()
                 .event("response.output_item.added")
-                .data(serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":&item_id,"role":"assistant"}}).to_string()));
+                .data(serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":&item_id,"role":"assistant"}}).to_string())).await;
 
-            // response.content_part.added
-            yield Ok(Event::default()
+            let _ = tx.send(Event::default()
                 .event("response.content_part.added")
-                .data(serde_json::json!({"type":"response.content_part.added","output_index":0,"content_index":0,"part":{"type":"output_text","text":""}}).to_string()));
+                .data(serde_json::json!({"type":"response.content_part.added","output_index":0,"content_index":0,"part":{"type":"output_text","text":""}}).to_string())).await;
 
             let mut sent_content = false;
-            while let Some(Ok(line)) = lines.next().await {
-                let line: String = line;
+            while let Ok(Some(line)) = lines.next_line().await {
                 if let Some((text, is_assistant)) = extract_stream_text(&line) {
-                    if !is_assistant && sent_content { continue; }
+                    if !is_assistant && sent_content {
+                        continue;
+                    }
                     sent_content = true;
-                    yield Ok(Event::default()
+                    if tx.send(Event::default()
                         .event("response.output_text.delta")
-                        .data(serde_json::json!({"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":text}).to_string()));
+                        .data(serde_json::json!({"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":text}).to_string())).await.is_err() {
+                        break;
+                    }
                 }
             }
 
-            // response.output_text.done
-            yield Ok(Event::default()
+            let _ = tx.send(Event::default()
                 .event("response.output_text.done")
-                .data(serde_json::json!({"type":"response.output_text.done","output_index":0,"content_index":0}).to_string()));
+                .data(serde_json::json!({"type":"response.output_text.done","output_index":0,"content_index":0}).to_string())).await;
 
-            // response.output_item.done
-            yield Ok(Event::default()
+            let _ = tx.send(Event::default()
                 .event("response.output_item.done")
-                .data(serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":&item_id,"role":"assistant"}}).to_string()));
+                .data(serde_json::json!({"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":&item_id,"role":"assistant"}}).to_string())).await;
 
-            // response.completed
-            yield Ok(Event::default()
+            let _ = tx.send(Event::default()
                 .event("response.completed")
-                .data(serde_json::json!({"type":"response.completed","response":{"id":&resp_id,"object":"response","status":"completed"}}).to_string()));
-        };
+                .data(serde_json::json!({"type":"response.completed","response":{"id":&resp_id,"object":"response","status":"completed"}}).to_string())).await;
+        });
+
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok::<_, Infallible>);
 
         Ok(Sse::new(stream).into_response())
     } else {
