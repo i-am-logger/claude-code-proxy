@@ -1,8 +1,10 @@
-# claude-proxy
+# claude-code-proxy
 
-[![CI](https://github.com/i-am-logger/claude-proxy/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/i-am-logger/claude-proxy/actions/workflows/ci.yml)
+[![CI](https://github.com/i-am-logger/claude-code-proxy/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/i-am-logger/claude-code-proxy/actions/workflows/ci.yml)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Rust](https://img.shields.io/badge/Rust-2024-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+
+> **Note on Anthropic ToS:** On Feb 19, 2026, Anthropic [updated their Consumer ToS](https://privacy.claude.com/en/articles/9264813-consumer-terms-of-service-updates) to ban extracting OAuth tokens for use in third-party tools. This proxy does **not** extract or forward tokens — it spawns `claude --print` as a subprocess, which is an [officially supported](https://code.claude.com/docs/en/legal-and-compliance) programmatic use pattern (same as scripting, piping, or cron jobs). The CLI manages its own authentication internally. This tool is intended for personal, single-user, localhost automation only.
 
 > OpenAI-compatible API proxy for [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code). Uses your authenticated Claude Code (Max subscription) for inference — no API keys needed.
 
@@ -20,7 +22,7 @@ Claude Code CLI is powerful but only works in the terminal. This proxy exposes i
 Client (OpenClaw/Cursor/etc.)
     │
     ▼  POST /v1/chat/completions or /v1/responses
-claude-proxy (this binary)
+claude-code-proxy (this binary)
     │
     ▼  claude --print --model opus --output-format stream-json
 Claude Code CLI (uses Max subscription)
@@ -43,7 +45,7 @@ All endpoints also available without the `/v1` prefix.
 ## Usage
 
 ```bash
-PROXY_API_KEY=your-secret claude-proxy
+PROXY_API_KEY=your-secret claude-code-proxy
 ```
 
 Then point your client to `http://localhost:8080/v1`.
@@ -85,7 +87,7 @@ curl -H "Authorization: Bearer your-secret" \
 {
   "models": {
     "providers": {
-      "claude-proxy": {
+      "claude-code-proxy": {
         "api": "openai-completions",
         "baseUrl": "http://127.0.0.1:8080/v1",
         "apiKey": "your-secret",
